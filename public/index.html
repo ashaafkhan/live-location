@@ -184,10 +184,12 @@
       const map = L.map('map').setView([51.505, -0.09], 13);
 
       const remoteMarkers = new Map();
+      const lastSeen = new Map();
 
       function attachSocketHandlers(activeSocket) {
         activeSocket.on('server:location:update', (data) => {
           const { id, latitude, longitude } = data;
+          lastSeen.set(id, Date.now());
           if (!remoteMarkers.has(id)) {
             const marker = L.marker([latitude, longitude])
               .addTo(map)
@@ -199,6 +201,17 @@
           }
         });
       }
+
+      setInterval(() => {
+        const now = Date.now();
+        for (const [id, ts] of lastSeen) {
+          if (now - ts > 30000) {
+            remoteMarkers.get(id)?.remove();
+            remoteMarkers.delete(id);
+            lastSeen.delete(id);
+          }
+        }
+      }, 10000);
 
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
@@ -251,8 +264,9 @@
               .bindPopup('You are here');
           } else {
             myCurrentLocationMarker.setLatLng([latitude, longitude]);
+            map.panTo([latitude, longitude]);
           }
-        }, 10 * 1000);
+        }, 5 * 1000);
       }
 
       async function connectSocket(user) {
