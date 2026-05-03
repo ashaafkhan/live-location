@@ -4,6 +4,11 @@
 
 Real-time location sharing app using Socket.IO and Kafka, with Firebase Auth for sign-in. The server broadcasts location updates through Kafka, and the frontend renders them on a Leaflet map.
 
+
+## Demo Video
+-YouTube Link: https://youtu.be/zoC_DMOTnA4
+
+
 ## Tech Stack
 - Node.js + Express
 - Socket.IO
@@ -36,6 +41,7 @@ node kafka-admin.js
 - Enable Email/Password in Authentication
 - Generate a Service Account JSON
 - Set env values in .env (do not commit secrets)
+- Use .env.example as a template
 
 5) Run the server
 ```
@@ -58,6 +64,16 @@ FIREBASE_MEASUREMENT_ID=...
 FIREBASE_SERVICE_ACCOUNT={...}
 ```
 
+## Socket Event Flow
+```mermaid
+flowchart LR
+	A[Browser] -->|client:location:update| S[Socket Server]
+	S -->|produce: location-updates| K[(Kafka)]
+	K -->|consume| S
+	K -->|consume| D[database-processor]
+	S -->|server:location:update| A
+```
+
 ## Demo Flow
 - User signs up / signs in
 - Browser shares location every few seconds
@@ -74,4 +90,11 @@ FIREBASE_SERVICE_ACCOUNT={...}
 Direct database writes on every socket event would overwhelm the database at scale.
 Kafka buffers events so the DB consumer can batch-write or throttle independently
 from the socket broadcast path.
+
+## Deployment Notes
+- Deploy the Node app on Railway or Render.
+- Use a managed Kafka provider like Upstash for a public broker URL.
+
+## Assumptions
+- This demo focuses on realtime updates and Kafka flow, not production-grade storage.
 

@@ -90,6 +90,20 @@ async function main() {
 
     socket.on('client:location:update', async (locationData) => {
       const { latitude, longitude } = locationData;
+
+      if (
+        typeof latitude !== 'number' ||
+        typeof longitude !== 'number' ||
+        Number.isNaN(latitude) ||
+        Number.isNaN(longitude) ||
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180
+      ) {
+        console.warn(`[Socket:${socket.id}]: Invalid location data`, locationData);
+        return;
+      }
       console.log(
         `[Socket:${socket.id}]:client:location:update:`,
         locationData,
