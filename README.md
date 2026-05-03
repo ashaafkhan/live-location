@@ -6,7 +6,7 @@ Real-time location sharing app using Socket.IO and Kafka, with Firebase Auth for
 
 
 ## Demo Video
--YouTube Link: https://youtu.be/zoC_DMOTnA4
+YouTube Link: https://youtu.be/zoC_DMOTnA4
 
 
 ## Tech Stack
@@ -90,11 +90,4 @@ flowchart LR
 Direct database writes on every socket event would overwhelm the database at scale.
 Kafka buffers events so the DB consumer can batch-write or throttle independently
 from the socket broadcast path.
-
-## Deployment Notes
-- Deploy the Node app on Railway or Render.
-- Use a managed Kafka provider like Upstash for a public broker URL.
-
-## Assumptions
-- This demo focuses on realtime updates and Kafka flow, not production-grade storage.
 
