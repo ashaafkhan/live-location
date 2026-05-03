@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Location Sharing Application</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <style>
+      :root {
+        color-scheme: light;
+      }
+
+      body {
+        margin: 0;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: #0b0f14;
+        color: #e6edf3;
+      }
+
+      #auth {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+      }
+
+      #auth-card {
+        width: min(420px, 92vw);
+        padding: 32px;
+        border-radius: 16px;
+        background: #131a22;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+        text-align: center;
+      }
+
+      #auth-card h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+      }
+
+      #auth-card p {
+        margin: 0 0 20px;
+        color: #9fb0c3;
+      }
+
+      #auth-form {
+        display: grid;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      #auth-form input {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid #2a3542;
+        background: #0f1620;
+        color: #e6edf3;
+      }
+
+      #auth-form input::placeholder {
+        color: #6b7f95;
+      }
+
+      .btn {
+        border: none;
+        padding: 10px 18px;
+        border-radius: 999px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .btn-primary {
+        background: #2f81f7;
+        color: #fff;
+      }
+
+      .btn-secondary {
+        background: transparent;
+        color: #9fb0c3;
+        border: 1px solid #2a3542;
+      }
+
+      .btn-row {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+
+      #auth-message {
+        min-height: 18px;
+        font-size: 13px;
+        color: #f0b77a;
+        margin-top: 8px;
+      }
+
+      #user-card {
+        display: none;
+        align-items: center;
+        gap: 12px;
+        justify-content: center;
+        margin-top: 16px;
+      }
+
+      #map {
+        height: 100vh;
+        display: none;
+      }
+
+      body.signed-in #auth {
+        display: none;
+      }
+
+      body.signed-in #map {
+        display: block;
+      }
+
+      body.signed-in #user-card {
+        display: flex;
+      }
+
+      body.signed-in #auth-form {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="auth">
+      <div id="auth-card">
+        <h1>Live Location</h1>
+        <p>Sign in to share your location in real time.</p>
+        <form id="auth-form">
+          <input type="email" id="email" placeholder="Email" required />
+          <input type="password" id="password" placeholder="Password" required />
+          <div class="btn-row">
+            <button class="btn btn-primary" type="submit">Sign in</button>
+            <button class="btn btn-secondary" id="sign-up-btn" type="button">
+              Sign up
+            </button>
+          </div>
+        </form>
+        <div id="auth-message"></div>
+        <div id="user-card">
+          <span id="user-email"></span>
+          <button class="btn btn-secondary" id="sign-out-btn">Sign out</button>
+        </div>
+      </div>
+    </div>
+    <div id="map"></div>
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="/socket.io/socket.io.js"></script>
+
+    <script type="module">
+      import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+      import {
+        getAuth,
+        createUserWithEmailAndPassword,
+        signInWithEmailAndPassword,
+        onAuthStateChanged,
+        signOut,
+      } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+
+      let socket = null;
+      let auth = null;
+      let locationTimer = null;
+
+      const authForm = document.getElementById('auth-form');
+      const signUpButton = document.getElementById('sign-up-btn');
+      const signOutButton = document.getElementById('sign-out-btn');
+      const userEmail = document.getElementById('user-email');
+      const authMessage = document.getElementById('auth-message');
+      const emailInput = document.getElementById('email');
+      const passwordInput = document.getElementById('password');
+
+      const map = L.map('map').setView([51.505, -0.09], 13);
+
+      const remoteMarkers = new Map();
+
+      function attachSocketHandlers(activeSocket) {
+        activeSocket.on('server:location:update', (data) => {
+          const { id, latitude, longitude } = data;
+          if (!remoteMarkers.has(id)) {
+            const marker = L.marker([latitude, longitude])
+              .addTo(map)
+              .bindPopup(id);
+            remoteMarkers.set(id, marker);
+          } else {
+            const existingMarker = remoteMarkers.get(id);
+            existingMarker.setLatLng([latitude, longitude]);
+          }
+        });
+      }
+
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution:
+          '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      }).addTo(map);
+
+      function getUsersCurrentLocation() {
+        return new Promise((res, rej) => {
+          if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(
+              (position) => {
+                console.log(`Got user's location`, position);
+                const latitude = position.coords.latitude;
+                const longitude = position.coords.longitude;
+                res({ latitude, longitude });
+              },
+              (err) => {
+                rej(err);
+              },
+
+              { enableHighAccuracy: true },
+            );
+          } else {
+            alert('Geolocation is not available in this browser');
+          }
+        });
+      }
+
+      let myCurrentLocationMarker = null;
+
+      function stopLocationUpdates() {
+        if (locationTimer) {
+          clearInterval(locationTimer);
+          locationTimer = null;
+        }
+      }
+
+      function startLocationUpdates() {
+        if (locationTimer) {
+          return;
+        }
+
+        locationTimer = setInterval(async () => {
+          const { latitude, longitude } = await getUsersCurrentLocation();
+          socket?.emit('client:location:update', { latitude, longitude });
+          if (!myCurrentLocationMarker) {
+            myCurrentLocationMarker = L.marker([latitude, longitude])
+              .addTo(map)
+              .bindPopup('You are here');
+          } else {
+            myCurrentLocationMarker.setLatLng([latitude, longitude]);
+          }
+        }, 10 * 1000);
+      }
+
+      async function connectSocket(user) {
+        if (!user) {
+          return;
+        }
+
+        const token = await user.getIdToken();
+        socket = io({ auth: { token } });
+        attachSocketHandlers(socket);
+      }
+
+      async function handleAuthChange(user) {
+        const signedIn = Boolean(user);
+        document.body.classList.toggle('signed-in', signedIn);
+        userEmail.textContent = signedIn ? user.email ?? '' : '';
+
+        if (signedIn) {
+          if (!socket) {
+            await connectSocket(user);
+          }
+          setTimeout(() => map.invalidateSize(), 0);
+          startLocationUpdates();
+        } else {
+          stopLocationUpdates();
+          if (socket) {
+            socket.disconnect();
+            socket = null;
+          }
+        }
+      }
+
+      async function initFirebase() {
+        const response = await fetch('/config');
+        const { firebaseConfig } = await response.json();
+        const app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+
+        authForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          authMessage.textContent = '';
+          try {
+            await signInWithEmailAndPassword(
+              auth,
+              emailInput.value,
+              passwordInput.value,
+            );
+          } catch (error) {
+            authMessage.textContent = error.message;
+          }
+        });
+
+        signUpButton.addEventListener('click', async () => {
+          authMessage.textContent = '';
+          try {
+            await createUserWithEmailAndPassword(
+              auth,
+              emailInput.value,
+              passwordInput.value,
+            );
+          } catch (error) {
+            authMessage.textContent = error.message;
+          }
+        });
+
+        signOutButton.addEventListener('click', async () => {
+          await signOut(auth);
+        });
+
+        onAuthStateChanged(auth, handleAuthChange);
+      }
+
+      window.addEventListener('load', initFirebase);
+    </script>
+  </body>
+</html>
