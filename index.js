@@ -99,8 +99,12 @@ async function main() {
         topic: 'location-updates',
         messages: [
           {
-            key: socket.id,
-            value: JSON.stringify({ id: socket.id, latitude, longitude }),
+            key: socket.data.userId,
+            value: JSON.stringify({
+              id: socket.data.userId,
+              latitude,
+              longitude,
+            }),
           },
         ],
       });

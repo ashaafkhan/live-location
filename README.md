@@ -64,3 +64,14 @@ FIREBASE_SERVICE_ACCOUNT={...}
 - Server publishes to Kafka
 - Consumer broadcasts to all clients
 
+![Terminal request](terminal%20request.jpeg)
+
+## Kafka Consumer Groups
+- Socket server runs with group `socket-server-<PORT>` and re-broadcasts updates.
+- Database processor runs as a separate group `database-processor` and persists data.
+
+## Why a Separate DB Processor
+Direct database writes on every socket event would overwhelm the database at scale.
+Kafka buffers events so the DB consumer can batch-write or throttle independently
+from the socket broadcast path.
+
